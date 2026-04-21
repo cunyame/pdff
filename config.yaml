@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# AGV Monitor — configuration file
+# Edit this file to match your network/server setup.
+# ─────────────────────────────────────────────────────────────────────────────
+
+server_host: "0.0.0.0"      # bind address (0.0.0.0 = all interfaces)
+server_port: 5000
+debug: false
+
+# How often the browser polls /api/data for a live update (seconds)
+ui_refresh_interval_s: 5
+
+# ── ACS server settings ───────────────────────────────────────────────────────
+acs:
+  # "csv"  → Pi downloads a CSV file from the ACS server
+  # "html" → Pi scrapes an HTML page rendered by the ACS server
+  mode: "csv"
+
+  # URL to the CSV or HTML endpoint on the ACS server
+  url: "http://192.168.1.100/agv_status.csv"
+  # url: "http://192.168.1.100/agv_status.html"   # ← use this for HTML mode
+
+  poll_interval_s: 10
+
+  # CSV mode: column names that map to the fields below.
+  # Change these to match your actual CSV headers.
+  csv_columns:
+    agv_id:    "AGV_ID"
+    status:    "Status"
+    location:  "Location"
+    battery:   "Battery_%"
+    speed:     "Speed_mps"
+    task:      "Current_Task"
+    error:     "Error_Code"
+
+  # HTML mode: CSS selector for the table containing AGV rows.
+  html_table_selector: "table#agv-status"
+
+  # Optional: basic-auth credentials for the ACS server
+  username: ""
+  password: ""
+
+  # Request timeout in seconds
+  timeout_s: 8
+
+# ── ESP32 charger station settings ───────────────────────────────────────────
+esp32:
+  # "push" → ESP32 POSTs data to Pi's /api/charger  (recommended)
+  # "poll" → Pi GETs data from each ESP32's own HTTP server
+  mode: "push"
+
+  # ---- POLL mode only: list every ESP32's IP + station ID ----
+  stations:
+    - id: "CS-01"
+      ip: "192.168.1.201"
+    - id: "CS-02"
+      ip: "192.168.1.202"
+    - id: "CS-03"
+      ip: "192.168.1.203"
+
+  # ESP32 endpoint path (poll mode): GET http://<ip>/data
+  poll_path: "/data"
+  poll_interval_s: 5
+  timeout_s: 4
+
+  # Alert thresholds (used for colour-coding in the UI)
+  thresholds:
+    voltage_min:     44.0    # V  — below this = warning
+    voltage_max:     56.0    # V  — above this = warning
+    current_max:     20.0    # A  — above this = warning
+    temperature_max: 50.0    # °C — above this = warning
