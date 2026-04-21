@@ -1,0 +1,72 @@
+```python?code_reference&code_event_index=2
+md_content = """# AGV & Charger Monitor: Test Environment Setup
+
+This guide explains how to run the AGV and Charger Station Monitor on your Raspberry Pi 4 in a fully simulated test environment. This allows you to verify the UI, check library compatibility, and test the auto-refresh logic before integrating any real ESP32s, 48V sensors, or connecting to the live ACS server.
+
+## 1. Directory Structure
+Create a new folder on your Pi 4 (e.g., `agv_monitor`) and save the project files exactly as follows:
+
+```
+```text?code_stdout&code_event_index=2
+AGV_Monitor_Test_Setup.md generated
+
+```text
+agv_monitor/
+├── app.py
+├── config.yaml
+├── test_with_mock_data.py
+├── fetchers/
+│   ├── __init__.py            <- (Optional: empty text file)
+│   ├── acs_fetcher.py
+│   └── esp32_fetcher.py
+└── templates/
+    └── dashboard.html
+```
+
+## 2. Prerequisites
+Your Pi 4 already has all the required libraries installed locally. No `pip install` commands are needed! The system will utilize your existing pre-installed packages:
+- `Flask` and `Werkzeug` (for the web server)
+- `simplejson` (for data handling)
+- `requests` and `beautifulsoup4` / `lxml` (for fetchers)
+- `PyYAML` (for configuration)
+
+## 3. Running the Mock Server
+Open the terminal on your Raspberry Pi 4, navigate to your project directory, and execute the mock script:
+
+```bash
+cd agv_monitor
+python3 test_with_mock_data.py
+```
+
+You should see an output similar to this in the terminal:
+```text
+==================================================
+  AGV Monitor — MOCK DATA MODE
+  Open http://localhost:5000 in your browser
+==================================================
+ * Serving Flask app 'app'
+ * Debug mode: off
+```
+
+## 4. Viewing the Dashboard
+Open the Chromium browser on your Pi 4 (or any device on the same Wi-Fi network) and go to:
+**`http://localhost:5000`**
+
+*(If accessing from a different machine on the network, replace `localhost` with the Pi's IP address, e.g., `http://192.168.1.X:5000`)*
+
+## What to Expect in Test Mode
+- **No Hardware Required:** The `test_with_mock_data.py` script bypasses the standard ACS and ESP32 fetchers.
+- **Live AGV Data:** A background thread generates randomized battery levels, locations, and status pills for 5 simulated AGVs, updating the internal store every 4 seconds.
+- **Live Charger Data:** Another thread simulates 3 ESP32 charging stations with fluctuating voltages (47.5V - 50.5V), current, and temperatures, updating every 3 seconds.
+- **UI Verification:** You can verify that the color-coded warnings trigger correctly (e.g., if a mock temperature exceeds 40°C, the text turns amber; >50°C turns red).
+"""
+with open("AGV_Monitor_Test_Setup.md", "w") as f:
+    f.write(md_content)
+print("AGV_Monitor_Test_Setup.md generated")
+
+
+```
+Your Markdown file is ready
+[file-tag: code-generated-file-0-1776791147657606175]
+
+Before scaling this up for the floor at the Sector 81 facility, running this isolated test on the Pi 4 ensures the dashboard logic, auto-refresh intervals, and UI color thresholds are all behaving exactly as intended. Once the mock test passes, the transition to live hardware is as simple as launching `app.py` instead of the mock script.
