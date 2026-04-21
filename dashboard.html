@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AGV &amp; Charger Monitor</title>
+<style>
+  /* ── Reset / base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --surface2:  #22263a;
+    --border:    #2e3350;
+    --text:      #e8eaf0;
+    --muted:     #7a7f9a;
+    --accent:    #4f7ef7;
+    --green:     #3ecf8e;
+    --amber:     #f5a623;
+    --red:       #e85555;
+    --radius:    10px;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* ── Layout ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: .3px; }
+  .status-bar { display: flex; gap: 20px; font-size: 12px; color: var(--muted); }
+  .status-bar span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.err { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  section { margin-bottom: 36px; }
+  section > h2 {
+    font-size: 15px; font-weight: 600;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  section > h2 .badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 1px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  /* ── Charger cards ── */
+  .charger-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .charger-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    position: relative;
+    transition: border-color .2s;
+  }
+  .charger-card:hover { border-color: var(--accent); }
+  .charger-card .cs-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .charger-card .cs-id { font-weight: 600; font-size: 15px; }
+  .cs-status {
+    font-size: 11px; font-weight: 600; padding: 2px 9px;
+    border-radius: 20px; text-transform: uppercase; letter-spacing: .4px;
+  }
+  .cs-status.charging { background: #1a3a2a; color: var(--green); border: 1px solid var(--green); }
+  .cs-status.idle     { background: #2a2a1a; color: var(--amber); border: 1px solid var(--amber); }
+  .cs-status.fault    { background: #3a1a1a; color: var(--red);   border: 1px solid var(--red);   }
+  .cs-status.offline  { background: #252525; color: var(--muted); border: 1px solid var(--border); }
+
+  .cs-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cs-metric { background: var(--surface2); border-radius: 6px; padding: 8px 10px; }
+  .cs-metric .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .cs-metric .value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  .cs-metric .unit  { font-size: 11px; color: var(--muted); }
+  .cs-metric .value.warn { color: var(--amber); }
+  .cs-metric .value.crit { color: var(--red); }
+
+  .cs-ts { font-size: 10px; color: var(--muted); margin-top: 10px; }
+
+  /* ── AGV table ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 10px 14px; vertical-align: middle; }
+  .pill {
+    display: inline-block; padding: 2px 9px;
+    border-radius: 20px; font-size: 11px; font-weight: 600;
+    text-transform: capitalize;
+  }
+  .pill-green  { background: #1a3a2a; color: var(--green); }
+  .pill-amber  { background: #2a2a1a; color: var(--amber); }
+  .pill-red    { background: #3a1a1a; color: var(--red);   }
+  .pill-gray   { background: #252525; color: var(--muted); }
+
+  .battery-bar {
+    width: 80px; height: 8px; background: var(--surface2);
+    border-radius: 4px; overflow: hidden; display: inline-block;
+    vertical-align: middle; margin-right: 6px;
+  }
+  .battery-bar-fill { height: 100%; border-radius: 4px; }
+  .battery-high { background: var(--green); }
+  .battery-mid  { background: var(--amber); }
+  .battery-low  { background: var(--red);   }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px;
+  }
+  .toolbar input[type=text] {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 12px; color: var(--text);
+    font-size: 13px; width: 220px;
+  }
+  .toolbar input[type=text]:focus { outline: none; border-color: var(--accent); }
+  .toolbar button, .toolbar a.btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 14px; color: var(--text);
+    cursor: pointer; font-size: 13px; white-space: nowrap;
+    transition: border-color .15s;
+  }
+  .toolbar button:hover, .toolbar a.btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .error-box {
+    background: #3a1a1a; border: 1px solid var(--red);
+    border-radius: var(--radius); padding: 10px 14px;
+    color: var(--red); font-size: 12px; margin-bottom: 12px;
+  }
+
+  /* ── Countdown ── */
+  #countdown { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  /* ── Responsive ── */
+  @media(max-width: 600px) {
+    header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .status-bar { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <h1>&#128663; AGV &amp; Charger Monitor</h1>
+  <div class="status-bar">
+    <span>
+      <span class="dot {{ 'ok' if not acs_error else 'err' }}" id="acs-dot"></span>
+      ACS
+      <span id="acs-ts">{{ acs_last_update or 'waiting…' }}</span>
+    </span>
+    <span>
+      <span class="dot {{ 'ok' if not esp_error else 'err' }}" id="esp-dot"></span>
+      Chargers
+      <span id="esp-ts">{{ esp_last_update or 'waiting…' }}</span>
+    </span>
+    <span id="countdown"></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Charger stations ── -->
+  <section>
+    <h2>
+      Charger stations
+      <span class="badge" id="charger-count">{{ chargers|length }}</span>
+    </h2>
+
+    {% if esp_error %}
+    <div class="error-box">&#9888; ESP32 error: {{ esp_error }}</div>
+    {% endif %}
+
+    <div class="charger-grid" id="charger-grid">
+      {% for sid, c in chargers.items() %}
+      {{ _render_charger_card(sid, c) }}
+      {% endfor %}
+      {% if not chargers %}
+      <p style="color:var(--muted); font-size:13px;">No charger data yet. Waiting for ESP32…</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── AGV table ── -->
+  <section>
+    <h2>
+      AGV fleet
+      <span class="badge" id="agv-count">{{ agv_list|length }}</span>
+    </h2>
+
+    {% if acs_error %}
+    <div class="error-box">&#9888; ACS error: {{ acs_error }}</div>
+    {% endif %}
+
+    <div class="toolbar">
+      <input type="text" id="agv-search" placeholder="Search AGV ID, status…" oninput="filterTable()">
+      <a class="btn" href="/export/agv.csv">&#8595; Export CSV</a>
+    </div>
+
+    <div class="table-wrap">
+      <table id="agv-table">
+        <thead>
+          <tr>
+            <th>AGV ID</th>
+            <th>Status</th>
+            <th>Location</th>
+            <th>Battery</th>
+            <th>Speed (m/s)</th>
+            <th>Task</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="agv-tbody">
+          {% for agv in agv_list %}
+          {{ _render_agv_row(agv) }}
+          {% endfor %}
+          {% if not agv_list %}
+          <tr><td colspan="7" style="color:var(--muted); text-align:center; padding:24px;">
+            Waiting for ACS data…
+          </td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+{# ── Jinja macros for card / row rendering ── #}
+{% macro _render_charger_card(sid, c) %}
+{% set status = c.get('status','unknown') %}
+<div class="charger-card">
+  <div class="cs-header">
+    <span class="cs-id">{{ sid }}</span>
+    <span class="cs-status {{ status }}">{{ status }}</span>
+  </div>
+  <div class="cs-metrics">
+    <div class="cs-metric">
+      <div class="label">Voltage</div>
+      <div class="value {{ 'crit' if (c.voltage|float) < 44 or (c.voltage|float) > 56 else '' }}">
+        {{ c.get('voltage', '—') }}<span class="unit"> V</span>
+      </div>
+    </div>
+    <div class="cs-metric">
+      <div class="label">Current</div>
+      <div class="value {{ 'warn' if (c.current|float) > 20 else '' }}">
+        {{ c.get('current', '—') }}<span class="unit"> A</span>
+      </div>
+    </div>
+    <div class="cs-metric">
+      <div class="label">Temperature</div>
+      <div class="value {{ 'crit' if (c.temperature|float) > 50 else ('warn' if (c.temperature|float) > 40 else '') }}">
+        {{ c.get('temperature', '—') }}<span class="unit"> °C</span>
+      </div>
+    </div>
+    <div class="cs-metric">
+      <div class="label">Power</div>
+      <div class="value">
+        {% if c.get('voltage') and c.get('current') %}
+          {{ "%.1f"|format(c.voltage|float * c.current|float) }}<span class="unit"> W</span>
+        {% else %}—{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="cs-ts">Updated: {{ c.get('timestamp','—') }}</div>
+</div>
+{% endmacro %}
+
+{% macro _render_agv_row(agv) %}
+{% set status = (agv.get('status') or 'unknown')|lower %}
+{% set batt   = agv.get('battery','0')|string|replace('%','')|float %}
+<tr>
+  <td><strong>{{ agv.get('agv_id', agv.get('AGV_ID','—')) }}</strong></td>
+  <td>
+    {% if 'run' in status or 'active' in status or 'moving' in status %}
+      <span class="pill pill-green">{{ status }}</span>
+    {% elif 'idle' in status or 'wait' in status %}
+      <span class="pill pill-amber">{{ status }}</span>
+    {% elif 'error' in status or 'fault' in status %}
+      <span class="pill pill-red">{{ status }}</span>
+    {% else %}
+      <span class="pill pill-gray">{{ status }}</span>
+    {% endif %}
+  </td>
+  <td>{{ agv.get('location','—') }}</td>
+  <td>
+    <div class="battery-bar">
+      <div class="battery-bar-fill {{ 'battery-high' if batt>50 else ('battery-mid' if batt>20 else 'battery-low') }}"
+           style="width:{{ [batt,100]|min }}%"></div>
+    </div>
+    {{ "%.0f"|format(batt) }}%
+  </td>
+  <td>{{ agv.get('speed','—') }}</td>
+  <td>{{ agv.get('task','—') }}</td>
+  <td>
+    {% if agv.get('error') and agv.get('error') not in ('', '0', 'None') %}
+      <span style="color:var(--red)">{{ agv.get('error') }}</span>
+    {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+  </td>
+</tr>
+{% endmacro %}
+
+<script>
+const REFRESH_INTERVAL = {{ refresh_interval }} * 1000;
+let countdown = REFRESH_INTERVAL / 1000;
+
+// ── Countdown display ────────────────────────────────────────────────────────
+const countEl = document.getElementById('countdown');
+setInterval(() => {
+  countdown = countdown <= 1 ? REFRESH_INTERVAL / 1000 : countdown - 1;
+  countEl.textContent = `Refresh in ${countdown}s`;
+}, 1000);
+
+// ── Live data fetch & render ─────────────────────────────────────────────────
+async function refreshData() {
+  try {
+    const resp = await fetch('/api/data');
+    if (!resp.ok) return;
+    const d = await resp.json();
+    renderChargers(d.chargers || {});
+    renderAGVTable(d.agv_list || []);
+    document.getElementById('acs-ts').textContent = d.acs_last_update || 'waiting…';
+    document.getElementById('esp-ts').textContent = d.esp_last_update || 'waiting…';
+    document.getElementById('acs-dot').className = 'dot ' + (d.acs_error ? 'err' : 'ok');
+    document.getElementById('esp-dot').className = 'dot ' + (d.esp_error ? 'err' : 'ok');
+    document.getElementById('charger-count').textContent = Object.keys(d.chargers||{}).length;
+    document.getElementById('agv-count').textContent     = (d.agv_list||[]).length;
+    countdown = REFRESH_INTERVAL / 1000;
+  } catch (e) { console.warn('Refresh error:', e); }
+}
+setInterval(refreshData, REFRESH_INTERVAL);
+
+// ── Charger card renderer ────────────────────────────────────────────────────
+function renderChargers(chargers) {
+  const grid = document.getElementById('charger-grid');
+  const ids  = Object.keys(chargers);
+  if (!ids.length) {
+    grid.innerHTML = '<p style="color:var(--muted);font-size:13px">No charger data yet…</p>';
+    return;
+  }
+  grid.innerHTML = ids.map(sid => chargerCardHTML(sid, chargers[sid])).join('');
+}
+
+function statusClass(s) {
+  const m = {'charging':'charging','idle':'idle','fault':'fault','offline':'offline'};
+  return m[s] || 'offline';
+}
+function warnClass(v, min, max) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return '';
+  if (min !== null && n < min) return 'crit';
+  if (max !== null && n > max) return 'crit';
+  return '';
+}
+
+function chargerCardHTML(sid, c) {
+  const st  = c.status || 'unknown';
+  const sc  = statusClass(st);
+  const pwr = (c.voltage && c.current)
+    ? (parseFloat(c.voltage) * parseFloat(c.current)).toFixed(1) + ' <span class="unit">W</span>'
+    : '—';
+  return `
+  <div class="charger-card">
+    <div class="cs-header">
+      <span class="cs-id">${sid}</span>
+      <span class="cs-status ${sc}">${st}</span>
+    </div>
+    <div class="cs-metrics">
+      <div class="cs-metric">
+        <div class="label">Voltage</div>
+        <div class="value ${warnClass(c.voltage,44,56)}">${c.voltage??'—'}<span class="unit"> V</span></div>
+      </div>
+      <div class="cs-metric">
+        <div class="label">Current</div>
+        <div class="value ${warnClass(c.current,null,20)}">${c.current??'—'}<span class="unit"> A</span></div>
+      </div>
+      <div class="cs-metric">
+        <div class="label">Temperature</div>
+        <div class="value ${warnClass(c.temperature,null,50)}">${c.temperature??'—'}<span class="unit"> °C</span></div>
+      </div>
+      <div class="cs-metric">
+        <div class="label">Power</div>
+        <div class="value">${pwr}</div>
+      </div>
+    </div>
+    <div class="cs-ts">Updated: ${c.timestamp||'—'}</div>
+  </div>`;
+}
+
+// ── AGV table renderer ───────────────────────────────────────────────────────
+function renderAGVTable(agvList) {
+  const tbody = document.getElementById('agv-tbody');
+  if (!agvList.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px">Waiting for ACS data…</td></tr>';
+    return;
+  }
+  tbody.innerHTML = agvList.map(agvRowHTML).join('');
+  filterTable();  // re-apply any active search
+}
+
+function pillClass(status) {
+  const s = (status||'').toLowerCase();
+  if (/run|active|moving/.test(s)) return 'pill-green';
+  if (/idle|wait/.test(s))         return 'pill-amber';
+  if (/error|fault/.test(s))       return 'pill-red';
+  return 'pill-gray';
+}
+
+function agvRowHTML(agv) {
+  const status = agv.status || agv.Status || 'unknown';
+  const batt   = parseFloat((agv.battery||agv['Battery_%']||'0').toString().replace('%','')) || 0;
+  const battCl = batt > 50 ? 'battery-high' : batt > 20 ? 'battery-mid' : 'battery-low';
+  const errVal = agv.error || agv.Error_Code || '';
+  const errHtml = (errVal && errVal !== '0' && errVal !== 'None')
+    ? `<span style="color:var(--red)">${errVal}</span>`
+    : `<span style="color:var(--muted)">—</span>`;
+  return `
+  <tr>
+    <td><strong>${agv.agv_id||agv.AGV_ID||'—'}</strong></td>
+    <td><span class="pill ${pillClass(status)}">${status}</span></td>
+    <td>${agv.location||agv.Location||'—'}</td>
+    <td>
+      <div class="battery-bar">
+        <div class="battery-bar-fill ${battCl}" style="width:${Math.min(batt,100)}%"></div>
+      </div>
+      ${batt.toFixed(0)}%
+    </td>
+    <td>${agv.speed||agv.Speed_mps||'—'}</td>
+    <td>${agv.task||agv.Current_Task||'—'}</td>
+    <td>${errHtml}</td>
+  </tr>`;
+}
+
+// ── Table search filter ──────────────────────────────────────────────────────
+function filterTable() {
+  const q   = document.getElementById('agv-search').value.toLowerCase();
+  const rows = document.querySelectorAll('#agv-tbody tr');
+  rows.forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+</script>
+</body>
+</html>
